@@ -24,7 +24,10 @@ object ReactiveFizzBuzz extends App {
       import GraphDSL.Implicits._
 
       // 1から50まで出力する source 。
-      val src = Source(1 to 50)
+      // throttle 機能により、1秒あたり3入力しか受け付けないように設定したため、適切なペースで出力されていく。
+      import scala.concurrent.duration._
+      import scala.language.postfixOps
+      val src = Source(1 to 50).throttle(3, 1 second)
 
       // 入力を3分岐させる。 Int を受け取るので Broadcast[Int] となる。基本的に型パラメータは入力の型を与えればよく、出力の型は自動的に推論される。
       val bcast = builder.add(Broadcast[Int](3))
