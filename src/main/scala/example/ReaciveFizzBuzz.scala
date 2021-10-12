@@ -23,11 +23,11 @@ object ReactiveFizzBuzz extends App {
       // ~> といった DSL を使えるようにする。
       import GraphDSL.Implicits._
 
-      // 1から50まで出力する source 。
-      // throttle 機能により、1秒あたり3入力しか受け付けないように設定したため、適切なペースで出力されていく。
+      // 1から1000まで出力する source 。
+      // throttle 機能により、1秒あたり60入力しか受け付けないように設定したため、適切なペースで出力されていく。
       import scala.concurrent.duration._
       import scala.language.postfixOps
-      val src = Source(1 to 50).throttle(3, 1 second)
+      val src = Source(1 to 1000).throttle(60, 1 second)
 
       // 入力を3分岐させる。 Int を受け取るので Broadcast[Int] となる。基本的に型パラメータは入力の型を与えればよく、出力の型は自動的に推論される。
       val bcast = builder.add(Broadcast[Int](3))
@@ -52,7 +52,7 @@ object ReactiveFizzBuzz extends App {
       // rhs は src から渡ってくる Int を文字列化したものが与えられる。
       // ここでは型パラメータは[入力1, 入力2, 出力]になっている。
       // Zip 系コンポーネントは2つの入力を待機し、それぞれが揃うようにするので、どちらかが欠けることはない。
-      val zipTakeFirstIfNotEmpty = builder.add(ZipWith[String, String, String]{
+      val zipTakeFirstIfNotEmpty = builder.add(ZipWith[String, String, String] {
         case ("", rhs) => rhs
         case (lhs, _)  => lhs
       })
@@ -62,7 +62,14 @@ object ReactiveFizzBuzz extends App {
       val stringify = Flow[Int].map(_.toString())
 
       // 文字列を入力に取り、それを一定の書式で表示する Sink 。
-      val sink = Sink.foreach[String](elem => println(s"got: $elem"))
+      val sink = Sink.foreach[String] { elem =>
+        // 恐るべきことに、 sink は低頻度でクラッシュしてしまう。何もしなければそこで中断して終了するが、後で実行戦略を設定するため無視して続行される。
+        if (Math.random() > 0.99) {
+          system.log.error("sink dead")
+          throw new RuntimeException("Boom!")
+        }
+        println(s"got: $elem")
+      }
 
       // ここで、各コンポーネントを結合する。
       // 結合には ~> を使う。 ~> を使うと、自動的に via や to に変換される。
@@ -82,5 +89,13 @@ object ReactiveFizzBuzz extends App {
       ClosedShape
   })
 
-  g.run()
+  // エラー発生時の回復戦略をここで設定する。
+  // throwされたエラーがRuntimeExceptionなら、その要素は捨て、無視して続行する。
+  // ただし分岐点にかかわる箇所でこれを行うとデッドロックを誘発するので、使う箇所に注意が必要である。
+  val decider: Supervision.Decider = {
+    case _: RuntimeException => Supervision.Resume
+    case _                   => Supervision.Stop
+  }
+
+  g.withAttributes(ActorAttributes.supervisionStrategy(decider)).run()
 }
