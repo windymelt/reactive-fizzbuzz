@@ -44,21 +44,19 @@ object ReactiveFizzBuzz extends App {
       val zipJoinString =
         builder.add(ZipWith[String, String, String]((lhs, rhs) => lhs + rhs))
 
-      // 2つの入力を Tuple2 にする単純な Zip 。挙動は型より自明なので引数は不要。
-      // ここでは型パラメータは[入力1, 入力2]になっている。
-      // Zipは2つの入力を待機し、それぞれが揃うようにするので、どちらかが欠けることはない。
-      val zip = builder.add(Zip[String, String])
+      // 2つの入力 (lhs, rhs とする) を受け取り、 lhs が非-空文字列ならそれを、さもなくば rhs を出力する Flow 。
+      // lhs は "fizz" "buzz" "fizzbuzz" "" のいずれかの値をとる。
+      // rhs は src から渡ってくる Int を文字列化したものが与えられる。
+      // ここでは型パラメータは[入力1, 入力2, 出力]になっている。
+      // Zip 系コンポーネントは2つの入力を待機し、それぞれが揃うようにするので、どちらかが欠けることはない。
+      val zipTakeFirstIfNotEmpty = builder.add(ZipWith[String, String, String]{
+        case ("", rhs) => rhs
+        case (lhs, _)  => lhs
+      })
 
       // Int を入力に取り、文字列に変形するだけの Flow 。
       // 入力を関数に渡したいので map を使っている。
       val stringify = Flow[Int].map(_.toString())
-
-      // Tuple2[String, String] を受け取り、 lhs が空文字列でなければそれを返し、さもなくば rhs を出力する Flow 。
-      // lhs は "fizz" "buzz" "fizzbuzz" "" のいずれかの値をとるため、 lhsが "" の場合は、 rhs に入力される、ただの文字列化した Int を出力したい。
-      val takeFirstIfNotZeroLength = Flow[(String, String)].map {
-        case ("", rhs) => rhs
-        case (lhs, _)  => lhs
-      }
 
       // 文字列を入力に取り、それを一定の書式で表示する Sink 。
       val sink = Sink.foreach[String](elem => println(s"got: $elem"))
@@ -72,9 +70,9 @@ object ReactiveFizzBuzz extends App {
       src ~> bcast
              bcast ~> fizz ~> zipJoinString.in0
              bcast ~> buzz ~> zipJoinString.in1
-                              zipJoinString.out ~> zip.in0
-             bcast ~> stringify                 ~> zip.in1
-                                                   zip.out ~> takeFirstIfNotZeroLength ~> sink
+                              zipJoinString.out ~> zipTakeFirstIfNotEmpty.in0
+             bcast ~> stringify                 ~> zipTakeFirstIfNotEmpty.in1
+                                                   zipTakeFirstIfNotEmpty.out ~> sink
       // format: on
 
       // 実行可能な完結したグラフであることを示すために ClosedShape を返す必要がある。
