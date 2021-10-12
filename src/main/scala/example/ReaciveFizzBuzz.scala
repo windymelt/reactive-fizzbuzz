@@ -64,11 +64,11 @@ object ReactiveFizzBuzz extends App {
       // ここで、各コンポーネントを結合する。
       // 結合には ~> を使う。 ~> を使うと、自動的に via や to に変換される。
       // bcast は本来は入出力の別に合わせてそれぞれ bcast.in と bcast.out(n) のように書く必要があるが、記述する上で自明な場合は省略できる。
+      // さらに、入力と出力を連続させた記述も可能である。
       // zip系は、どの入力先に割り当てたいのかが自明にならないため、 zip.in0 のように明示する必要がある。
       // zip.out も明記する必要があるが、なぜなのかは不明。
       // format: off
-      src ~> bcast
-             bcast ~> fizz ~> zipJoinString.in0
+      src ~> bcast ~> fizz ~> zipJoinString.in0
              bcast ~> buzz ~> zipJoinString.in1
                               zipJoinString.out ~> zipTakeFirstIfNotEmpty.in0
              bcast ~> stringify                 ~> zipTakeFirstIfNotEmpty.in1
