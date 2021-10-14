@@ -32,34 +32,43 @@ object ReactiveFizzBuzz extends App {
       // 入力を3分岐させる。 Int を受け取るので Broadcast[Int] となる。基本的に型パラメータは入力の型を与えればよく、出力の型は自動的に推論される。
       val bcast = builder.add(Broadcast[Int](3))
 
-      // Int を受け取り、それが3で割りきれるなら、 "fizz" を、さもなくば "" を出力する flow 。 buzzも同様。
+      // Int を受け取り、それが3で割りきれるなら、 Some("fizz") を、さもなくば None を出力する flow 。 buzzも同様。
       val fizz = Flow[Int].map {
-        case n if n % 3 == 0 => "fizz"
-        case n               => ""
+        case n if n % 3 == 0 => Some("fizz")
+        case n               => None
       }
       val buzz = Flow[Int].map {
-        case n if n % 5 == 0 => "buzz"
-        case n               => ""
+        case n if n % 5 == 0 => Some("buzz")
+        case n               => None
       }
 
-      // 2つの String を受け取り、結合して String を出力する ZipWith 。 Zip に加えて、 Tuple2 を 受け取り String を返す Flow の組み合わせでも実現できるが、 ZipWith を使ったほうが簡便。
+      // 2つの Option[String] を受け取り、結合して Option[String] を出力する ZipWith 。 Zip に加えて、 Tuple2 を 受け取り String を返す Flow の組み合わせでも実現できるが、 ZipWith を使ったほうが簡便。
       // ここでは型パラメータは[入力1, 入力2, 出力]になっている。
+      // Monoidを使ってうまく処理する。
+      import cats.Monoid
+      import cats.implicits._
       val zipJoinString =
-        builder.add(ZipWith[String, String, String]((lhs, rhs) => lhs + rhs))
+        builder.add(
+          ZipWith[Option[String], Option[String], Option[String]]((lhs, rhs) =>
+            Monoid[Option[String]].combine(lhs, rhs)
+          )
+        )
 
       // 2つの入力 (lhs, rhs とする) を受け取り、 lhs が非-空文字列ならそれを、さもなくば rhs を出力する Flow 。
-      // lhs は "fizz" "buzz" "fizzbuzz" "" のいずれかの値をとる。
-      // rhs は src から渡ってくる Int を文字列化したものが与えられる。
+      // lhs は "fizz" "buzz" "fizzbuzz" のいずれかの値をとり、 Option にくるまれている。
+      // rhs は src から渡ってくる Int を文字列化したものが Some として与えられる。
       // ここでは型パラメータは[入力1, 入力2, 出力]になっている。
       // Zip 系コンポーネントは2つの入力を待機し、それぞれが揃うようにするので、どちらかが欠けることはない。
-      val zipTakeFirstIfNotEmpty = builder.add(ZipWith[String, String, String] {
-        case ("", rhs) => rhs
-        case (lhs, _)  => lhs
+      // MonoidKを使ってうまく処理する。
+      import cats.MonoidK
+      val zipTakeFirstIfNotEmpty = builder.add(ZipWith[Option[String], Option[String], String] { (lhs, rhs) =>
+        MonoidK[Option].combineK(lhs, rhs).get
       })
 
       // Int を入力に取り、文字列に変形するだけの Flow 。
       // 入力を関数に渡したいので map を使っている。
-      val stringify = Flow[Int].map(_.toString())
+      // 後で便利に使うのでここで Option[String] に格納している。
+      val stringify = Flow[Int].map(_.toString().some)
 
       // 文字列を入力に取り、それを一定の書式で表示する Sink 。
       val sink = Sink.foreach[String] { elem =>
