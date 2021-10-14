@@ -27,7 +27,7 @@ object ReactiveFizzBuzz extends App {
       // throttle 機能により、1秒あたり60入力しか受け付けないように設定したため、適切なペースで出力されていく。
       import scala.concurrent.duration._
       import scala.language.postfixOps
-      val src = Source(1 to 1000).throttle(60, 1 second)
+      val src = Source(1 to 1000).throttle(200, 1 second)
 
       // 入力を3分岐させる。 Int を受け取るので Broadcast[Int] となる。基本的に型パラメータは入力の型を与えればよく、出力の型は自動的に推論される。
       val bcast = builder.add(Broadcast[Int](3))
@@ -42,8 +42,8 @@ object ReactiveFizzBuzz extends App {
 
       // 2つの Option[String] を受け取り、結合して Option[String] を出力する ZipWith 。 Zip に加えて、 Tuple2 を 受け取り String を返す Flow の組み合わせでも実現できるが、 ZipWith を使ったほうが簡便。
       // ここでは型パラメータは[入力1, 入力2, 出力]になっている。
-      // Monoidを使ってうまく処理する。
-      import cats.Monoid
+      // Semigroup を使ってうまく処理する。
+      import cats.Semigroup
       import cats.implicits._
       val zipJoinString =
         builder.add(
@@ -55,8 +55,8 @@ object ReactiveFizzBuzz extends App {
       // rhs は src から渡ってくる Int を文字列化したものが Some として与えられる。
       // ここでは型パラメータは[入力1, 入力2, 出力]になっている。
       // Zip 系コンポーネントは2つの入力を待機し、それぞれが揃うようにするので、どちらかが欠けることはない。
-      // MonoidKを使ってうまく処理する。
-      import cats.MonoidK
+      // SemigroupK を使ってうまく処理する。
+      import cats.SemigroupK
       val zipTakeFirstIfNotEmpty =
         builder.add(
           ZipWith((lhs: Option[String], rhs: Option[String]) =>
