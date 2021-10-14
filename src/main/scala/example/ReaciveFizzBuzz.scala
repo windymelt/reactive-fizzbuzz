@@ -38,8 +38,7 @@ object ReactiveFizzBuzz extends App {
       val fizzpf: Int --> String = { case n if n % 3 == 0 => "fizz" }
       val buzzpf: Int --> String = { case n if n % 5 == 0 => "buzz" }
       // liftして Int => Option[String] に変換する
-      val (fizz, buzz) =
-        (Flow[Int].map(fizzpf.lift), Flow[Int].map(buzzpf.lift))
+      val List(fizz, buzz) = List(fizzpf.lift, buzzpf.lift).map(Flow[Int].map)
 
       // 2つの Option[String] を受け取り、結合して Option[String] を出力する ZipWith 。 Zip に加えて、 Tuple2 を 受け取り String を返す Flow の組み合わせでも実現できるが、 ZipWith を使ったほうが簡便。
       // ここでは型パラメータは[入力1, 入力2, 出力]になっている。
@@ -60,7 +59,9 @@ object ReactiveFizzBuzz extends App {
       import cats.MonoidK
       val zipTakeFirstIfNotEmpty =
         builder.add(
-          ZipWith((lhs: Option[String], rhs: Option[String]) => (lhs <+> rhs).get)
+          ZipWith((lhs: Option[String], rhs: Option[String]) =>
+            (lhs <+> rhs).get
+          )
         )
 
       // Int を入力に取り、文字列に変形するだけの Flow 。
