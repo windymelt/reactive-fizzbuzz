@@ -33,14 +33,12 @@ object ReactiveFizzBuzz extends App {
       val bcast = builder.add(Broadcast[Int](3))
 
       // Int を受け取り、それが3で割りきれるなら、 Some("fizz") を、さもなくば None を出力する flow 。 buzzも同様。
-      val fizz = Flow[Int].map {
-        case n if n % 3 == 0 => Some("fizz")
-        case n               => None
-      }
-      val buzz = Flow[Int].map {
-        case n if n % 5 == 0 => Some("buzz")
-        case n               => None
-      }
+      // いったん変数にPartialFunctionを受ける
+      type -->[A, B] = PartialFunction[A, B]
+      val fizzpf: Int --> String = { case n if n % 3 == 0 => "fizz" }
+      val buzzpf: Int --> String = { case n if n % 5 == 0 => "buzz" }
+      // liftして Int => Option[String] に変換する
+      val (fizz, buzz) = (Flow[Int].map(fizzpf.lift), Flow[Int].map(buzzpf.lift))
 
       // 2つの Option[String] を受け取り、結合して Option[String] を出力する ZipWith 。 Zip に加えて、 Tuple2 を 受け取り String を返す Flow の組み合わせでも実現できるが、 ZipWith を使ったほうが簡便。
       // ここでは型パラメータは[入力1, 入力2, 出力]になっている。
@@ -61,9 +59,11 @@ object ReactiveFizzBuzz extends App {
       // Zip 系コンポーネントは2つの入力を待機し、それぞれが揃うようにするので、どちらかが欠けることはない。
       // MonoidKを使ってうまく処理する。
       import cats.MonoidK
-      val zipTakeFirstIfNotEmpty = builder.add(ZipWith[Option[String], Option[String], String] { (lhs, rhs) =>
-        MonoidK[Option].combineK(lhs, rhs).get
-      })
+      val zipTakeFirstIfNotEmpty =
+        builder.add(ZipWith[Option[String], Option[String], String] {
+          (lhs, rhs) =>
+            MonoidK[Option].combineK(lhs, rhs).get
+        })
 
       // Int を入力に取り、文字列に変形するだけの Flow 。
       // 入力を関数に渡したいので map を使っている。
